@@ -1,10 +1,11 @@
+---
 name: ci (self-check)
 
-on:
+'on':
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
 
 permissions:
   contents: read
@@ -16,12 +17,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      # actionlint binaire précompilé
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
         with:
           reporter: github-check
-          fail_on_error: true
+          fail_level: error   # <- remplace fail_on_error
 
   yamllint:
     name: Lint YAML files
@@ -32,8 +32,8 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - name: Install yamllint
         run: pip install yamllint
-      - name: Run yamllint
-        run: yamllint -s .
+      - name: Run yamllint (config local)
+        run: yamllint -s -c .yamllint .
