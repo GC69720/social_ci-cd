@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# 👉 Autorise le workflow appelé à utiliser les permissions requises
+#  Autorise le workflow appelé à utiliser les permissions requises
 permissions:
   contents: read
   packages: write          # pour docker/build-push-action -> GHCR
