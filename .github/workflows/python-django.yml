@@ -51,11 +51,19 @@ on:
       CLOUD_ROLE:
         required: false
 
+# ✅ Déclare aussi les permissions au niveau workflow (sécurisé et compatible validation)
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  id-token: write
+
 jobs:
   lint-test-build:
     name: Lint • Test • (Build Docker optionnel)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # (on pourrait réduire au niveau job, mais on garde aligné avec le bloc global)
     permissions:
       contents: read
       packages: write
@@ -69,7 +77,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
-      CLOUD_ROLE: ${{ secrets.CLOUD_ROLE }}   # <- projection du secret dans env
+      CLOUD_ROLE: ${{ secrets.CLOUD_ROLE }}
 
     steps:
       - name: Checkout
@@ -186,7 +194,7 @@ jobs:
           build-args: ${{ inputs.docker_build_args }}
 
       - name: OIDC to Cloud (optionnel)
-        if: ${{ env.CLOUD_ROLE != '' }}        # <- condition corrigée
+        if: ${{ env.CLOUD_ROLE != '' }}
         run: |
           echo "Assume cloud role with OIDC here (AWS/GCP/Azure)…"
           # Exemple AWS:
