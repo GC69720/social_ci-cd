@@ -1,0 +1,30 @@
+# Global
+.DS_Store
+.env
+.env.*
+*.pyc
+__pycache__/
+*.log
+.cache/
+.vscode/
+.idea/
+dist/
+build/
+coverage/
+
+# Python
+.venv/
+venv/
+.poetry/
+.mypy_cache/
+.pytest_cache/
+
+# Node/TypeScript
+node_modules/
+.next/
+out/
+expo/
+
+# Podman/OCI
+**/*.pid
+**/postgres-data/

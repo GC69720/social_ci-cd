@@ -1,0 +1,67 @@
+name: Release (Buildah/Podman → GHCR)
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Buildah/Podman
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          podman: true
+          buildah: true
+
+      - name: Login to GHCR
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build backend image (OCI) with Buildah
+        id: backend
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/template_projet-backend
+          tags: latest,${{ github.ref_name }}
+          containerfiles: infra/podman/backend.Containerfile
+          context: .
+          oci: true
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+
+      - name: Push backend
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.backend.outputs.image }}
+          tags: ${{ steps.backend.outputs.tags }}
+
+      - name: Build web image (OCI) with Buildah
+        id: web
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/template_projet-web
+          tags: latest,${{ github.ref_name }}
+          containerfiles: infra/podman/web.Containerfile
+          context: .
+          oci: true
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+
+      - name: Push web
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.web.outputs.image }}
+          tags: ${{ steps.web.outputs.tags }}

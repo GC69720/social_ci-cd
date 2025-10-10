@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  backend:
+    image: ghcr.io/${IMAGE_NAMESPACE:-myorg}/template_projet-backend:latest
+    env_file:
+      - .env.backend
+    ports: ["8000:8000"]
+    command: bash -lc "cd /app/backend && gunicorn app.wsgi:application --bind 0.0.0.0:8000"
+  web:
+    image: ghcr.io/${IMAGE_NAMESPACE:-myorg}/template_projet-web:latest
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:8000
+    ports: ["3000:3000"]

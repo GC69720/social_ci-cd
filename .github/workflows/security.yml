@@ -1,0 +1,28 @@
+name: Security
+on:
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"  # weekly
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python audit
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt || true
+      - name: Node audit
+        working-directory: web
+        run: |
+          npm audit --audit-level=moderate || true
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect secrets
+        run: |
+          pip install detect-secrets
+          detect-secrets scan --baseline .secrets.baseline .

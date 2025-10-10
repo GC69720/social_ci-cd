@@ -1,0 +1,13 @@
+[Unit]
+Description=template_projet web (dev)
+
+[Container]
+ContainerName=template_projet-web
+Image=localhost/template_projet-web:dev
+Network=host
+Environment=NEXT_PUBLIC_API_BASE=http://localhost:8000
+Volume=%h/projects/template_projet/web:/app/web:Z
+Exec=bash -lc "cd /app/web && npm run dev"
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,53 @@
+version: "3.9"
+services:
+  db:
+    image: docker.io/library/postgres:16
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports: ["5432:5432"]
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data:z
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  mongo:
+    image: docker.io/library/mongo:7.0
+    ports: ["27017:27017"]
+    environment:
+      MONGO_INITDB_DATABASE: app
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: ./infra/podman/backend.Containerfile
+    command: bash /app/backend/compose/entrypoint.sh
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings
+      DATABASE_URL: postgres://app:app@db:5432/app
+      SECRET_KEY: dev-secret
+      DEBUG: "1"
+      ALLOWED_HOSTS: "*"
+      PYTHONPATH: /app/backend/src
+      REDIS_URL: redis://redis:6379/0
+      MONGO_URL: mongodb://mongo:27017
+    volumes:
+      - ../../backend:/app/backend:Z
+    ports: ["8000:8000"]
+    depends_on: [db, redis, mongo]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: ./infra/podman/web.Containerfile
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:8000
+    volumes:
+      - ../../web:/app/web:Z
+    ports: ["3000:3000"]
+    command: bash -lc "cd /app/web && npm run dev"
+    depends_on: [backend]

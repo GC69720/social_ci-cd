@@ -1,0 +1,38 @@
+name: Deploy (SSH → Podman Compose)
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+env:
+  DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files to remote
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "infra/podman/podman-compose.prod.yml,infra/podman/.env.backend.sample"
+          target: "${{ env.DEPLOY_DIR }}"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            cd "${DEPLOY_DIR}"
+            cp -n infra/podman/.env.backend.sample .env.backend || true
+            echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+            IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" podman-compose -f infra/podman/podman-compose.prod.yml pull
+            IMAGE_NAMESPACE="${IMAGE_NAMESPACE}" podman-compose -f infra/podman/podman-compose.prod.yml up -d

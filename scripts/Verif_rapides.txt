@@ -1,0 +1,12 @@
+Tips de vérif rapides
+
+# Containers du projet
+py -m podman_compose -f infra/podman/podman-compose.dev.win.images.yml ps
+
+# Ports exposés
+podman port podman_backend_1
+
+# Santé API
+Invoke-RestMethod http://localhost:8000/health
+Invoke-RestMethod http://localhost:8000/users/orm
+Invoke-RestMethod -Method Post -Body @{ email='foo@example.com' } http://localhost:8000/users/orm
