@@ -6,12 +6,12 @@ on:
   pull_request:
     branches: [ "main" ]
 
-#  Autorise le workflow appelé à utiliser les permissions requises
+# Permissions nécessaires si tu ajoutes des steps (ici conservées pour homogénéité)
 permissions:
   contents: read
-  packages: write          # pour docker/build-push-action -> GHCR
-  security-events: write   # pour CodeQL
-  id-token: write          # pour OIDC éventuel
+  packages: write
+  security-events: write
+  id-token: write
 
 jobs:
   app-ci:
@@ -19,5 +19,8 @@ jobs:
     with:
       python_version: "3.12"
       working_directory: "."
-      run_tests: true
-      docker_image_name: ""   # laisse vide si pas de build image
+      run_tests: false            # <— pas de tests dans le repo de templates
+      upload_test_artifacts: false
+      django_settings_module: ""  # aucun Django ici
+      enable_codeql: false        # garde à false pour un vert rapide
+      docker_image_name: ""       # pas de build image dans le repo de templates
