@@ -31,6 +31,10 @@ on:
         description: "Commande supplémentaire d'installation (ex: pip install -e .[dev])"
         type: string
         default: ""
+      enable_codeql:
+        description: "Activer CodeQL (SAST)"
+        type: boolean
+        default: false
       docker_image_name:
         description: "Nom d'image à builder/pousser (org/app). Vide = pas de build."
         type: string
@@ -51,7 +55,7 @@ on:
       CLOUD_ROLE:
         required: false
 
-# ✅ Déclare aussi les permissions au niveau workflow (sécurisé et compatible validation)
+# Permissions globales (le caller doit aussi les autoriser si nécessaire)
 permissions:
   contents: read
   packages: write
@@ -60,10 +64,9 @@ permissions:
 
 jobs:
   lint-test-build:
-    name: Lint • Test • (Build Docker optionnel)
+    name: Lint • Test • (Docker/CodeQL optionnels)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # (on pourrait réduire au niveau job, mais on garde aligné avec le bloc global)
     permissions:
       contents: read
       packages: write
@@ -166,11 +169,13 @@ jobs:
           retention-days: 7
 
       - name: CodeQL init (Python)
+        if: ${{ inputs.enable_codeql }}
         uses: github/codeql-action/init@v3
         with:
           languages: python
 
       - name: CodeQL analyze
+        if: ${{ inputs.enable_codeql }}
         uses: github/codeql-action/analyze@v3
 
       - name: Login GHCR (si build image)
@@ -197,5 +202,3 @@ jobs:
         if: ${{ env.CLOUD_ROLE != '' }}
         run: |
           echo "Assume cloud role with OIDC here (AWS/GCP/Azure)…"
-          # Exemple AWS:
-          # aws sts assume-role-with-web-identity --role-arn "$CLOUD_ROLE" --role-session-name ci-session --web-identity-token "$ACTIONS_ID_TOKEN_REQUEST_TOKEN"
