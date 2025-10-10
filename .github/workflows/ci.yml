@@ -1,14 +1,23 @@
 name: ci
+
 on:
-  push: { branches: ["main"] }
-  pull_request: { branches: ["main"] }
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# 👉 Autorise le workflow appelé à utiliser les permissions requises
+permissions:
+  contents: read
+  packages: write          # pour docker/build-push-action -> GHCR
+  security-events: write   # pour CodeQL
+  id-token: write          # pour OIDC éventuel
 
 jobs:
   app-ci:
     uses: GC69720/social_ci-cd/.github/workflows/python-django.yml@v1
     with:
       python_version: "3.12"
-      working_directory: "."          # ou "backend"
+      working_directory: "."
       run_tests: true
-      django_settings_module: ""      # ex: "app.settings" quand tu auras Django
-      docker_image_name: ""           # active plus tard pour builder une image
+      docker_image_name: ""   # laisse vide si pas de build image
