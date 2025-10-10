@@ -31,7 +31,6 @@ on:
         description: "Commande supplémentaire d'installation (ex: pip install -e .[dev])"
         type: string
         default: ""
-      # Build d'image (optionnel)
       docker_image_name:
         description: "Nom d'image à builder/pousser (org/app). Vide = pas de build."
         type: string
@@ -49,7 +48,6 @@ on:
         type: string
         default: ""
     secrets:
-      # Ex: role cloud assumé via OIDC si besoin côté consommateur
       CLOUD_ROLE:
         required: false
 
@@ -60,9 +58,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write          # nécessaire si push image (GHCR)
-      security-events: write   # nécessaire pour CodeQL
-      id-token: write          # nécessaire si OIDC (déploiement cloud)
+      packages: write
+      security-events: write
+      id-token: write
     defaults:
       run:
         working-directory: ${{ inputs.working_directory }}
@@ -71,6 +69,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      CLOUD_ROLE: ${{ secrets.CLOUD_ROLE }}   # <- projection du secret dans env
 
     steps:
       - name: Checkout
@@ -89,12 +88,10 @@ jobs:
       - name: Installer dépendances (requirements/pyproject)
         run: |
           set -euo pipefail
-          # 1) requirements explicite si fourni
           if [[ -n "${{ inputs.requirements_file }}" && -f "${{ inputs.requirements_file }}" ]]; then
             echo ">> Installing from ${{ inputs.requirements_file }}"
             pip install -r "${{ inputs.requirements_file }}"
           else
-            # 2) auto-detect
             if [[ -f "requirements.txt" ]]; then
               echo ">> Installing from requirements.txt"
               pip install -r requirements.txt
@@ -108,18 +105,15 @@ jobs:
               pip install -e .
             fi
           fi
-          # 3) extras
           if [[ -n "${{ inputs.extra_install_cmd }}" ]]; then
             echo ">> Running extra install: ${{ inputs.extra_install_cmd }}"
             eval "${{ inputs.extra_install_cmd }}"
           fi
-          # Outils CI
           pip install pre-commit pytest
 
-      - name: pre-commit (ruff/black/isort/…) 
+      - name: pre-commit (ruff/black/isort/…)
         run: |
           set -e
-          # Si pas de config, on ne fait pas échouer la CI
           if [[ -f ".pre-commit-config.yaml" ]]; then
             pre-commit run --all-files
           else
@@ -133,10 +127,9 @@ jobs:
         run: |
           python - <<'PY'
           import os, sys
-          from importlib import import_module
           settings_mod = os.environ.get("DJANGO_SETTINGS_MODULE")
           if not settings_mod:
-            sys.exit("DJANGO_SETTINGS_MODULE not set")
+              sys.exit("DJANGO_SETTINGS_MODULE not set")
           print(f"Running Django checks for {settings_mod}…")
           try:
               import django
@@ -193,7 +186,7 @@ jobs:
           build-args: ${{ inputs.docker_build_args }}
 
       - name: OIDC to Cloud (optionnel)
-        if: ${{ secrets.CLOUD_ROLE != '' }}
+        if: ${{ env.CLOUD_ROLE != '' }}        # <- condition corrigée
         run: |
           echo "Assume cloud role with OIDC here (AWS/GCP/Azure)…"
           # Exemple AWS:
