@@ -1,20 +1,14 @@
 name: ci
-
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  push: { branches: ["main"] }
+  pull_request: { branches: ["main"] }
 
 jobs:
   app-ci:
-    uses: GC69720/ci-templates/.github/workflows/python-django.yml@v1
+    uses: GC69720/social_ci-cd/.github/workflows/python-django.yml@v1
     with:
       python_version: "3.12"
-      working_directory: "backend"                 # ajuste si ton code n'est pas dans /backend
+      working_directory: "."          # ou "backend"
       run_tests: true
-      docker_image_name: "gc69720/reseau-social-backend"
-      docker_context: "."
-      dockerfile: "infra/docker/Dockerfile.backend" # ajuste si ton Dockerfile est ailleurs
-    secrets:
-      CLOUD_ROLE: ${{ secrets.CLOUD_ROLE }}         # optionnel si OIDC cloud
+      django_settings_module: ""      # ex: "app.settings" quand tu auras Django
+      docker_image_name: ""           # active plus tard pour builder une image

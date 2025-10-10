@@ -1,0 +1,200 @@
+name: python-django
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        description: "Version de Python à utiliser"
+        type: string
+        default: "3.12"
+      working_directory:
+        description: "Chemin de travail (racine du projet Python/Django)"
+        type: string
+        default: "."
+      run_tests:
+        description: "Exécuter la suite de tests (pytest)"
+        type: boolean
+        default: true
+      upload_test_artifacts:
+        description: "Téléverser les rapports/artefacts de tests"
+        type: boolean
+        default: true
+      django_settings_module:
+        description: "Valeur de DJANGO_SETTINGS_MODULE (vide = ne pas exécuter de checks Django)"
+        type: string
+        default: ""
+      requirements_file:
+        description: "Chemin du fichier requirements (vide = auto-detect)"
+        type: string
+        default: ""
+      extra_install_cmd:
+        description: "Commande supplémentaire d'installation (ex: pip install -e .[dev])"
+        type: string
+        default: ""
+      # Build d'image (optionnel)
+      docker_image_name:
+        description: "Nom d'image à builder/pousser (org/app). Vide = pas de build."
+        type: string
+        default: ""
+      docker_context:
+        description: "Contexte Docker"
+        type: string
+        default: "."
+      dockerfile:
+        description: "Chemin du Dockerfile"
+        type: string
+        default: "Dockerfile"
+      docker_build_args:
+        description: "Arguments de build Docker (ex: BUILDPLATFORM=linux/amd64)"
+        type: string
+        default: ""
+    secrets:
+      # Ex: role cloud assumé via OIDC si besoin côté consommateur
+      CLOUD_ROLE:
+        required: false
+
+jobs:
+  lint-test-build:
+    name: Lint • Test • (Build Docker optionnel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write          # nécessaire si push image (GHCR)
+      security-events: write   # nécessaire pour CodeQL
+      id-token: write          # nécessaire si OIDC (déploiement cloud)
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ inputs.python_version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: "pip"
+          cache-dependency-path: |
+            **/requirements*.txt
+            **/pyproject.toml
+            **/poetry.lock
+
+      - name: Installer dépendances (requirements/pyproject)
+        run: |
+          set -euo pipefail
+          # 1) requirements explicite si fourni
+          if [[ -n "${{ inputs.requirements_file }}" && -f "${{ inputs.requirements_file }}" ]]; then
+            echo ">> Installing from ${{ inputs.requirements_file }}"
+            pip install -r "${{ inputs.requirements_file }}"
+          else
+            # 2) auto-detect
+            if [[ -f "requirements.txt" ]]; then
+              echo ">> Installing from requirements.txt"
+              pip install -r requirements.txt
+            fi
+            if [[ -f "requirements-dev.txt" ]]; then
+              echo ">> Installing from requirements-dev.txt"
+              pip install -r requirements-dev.txt
+            fi
+            if [[ -f "pyproject.toml" ]]; then
+              echo ">> Installing project (pyproject)"
+              pip install -e .
+            fi
+          fi
+          # 3) extras
+          if [[ -n "${{ inputs.extra_install_cmd }}" ]]; then
+            echo ">> Running extra install: ${{ inputs.extra_install_cmd }}"
+            eval "${{ inputs.extra_install_cmd }}"
+          fi
+          # Outils CI
+          pip install pre-commit pytest
+
+      - name: pre-commit (ruff/black/isort/…) 
+        run: |
+          set -e
+          # Si pas de config, on ne fait pas échouer la CI
+          if [[ -f ".pre-commit-config.yaml" ]]; then
+            pre-commit run --all-files
+          else
+            echo "No .pre-commit-config.yaml found; skipping."
+          fi
+
+      - name: Checks Django (optionnel)
+        if: ${{ inputs.django_settings_module != '' }}
+        env:
+          DJANGO_SETTINGS_MODULE: ${{ inputs.django_settings_module }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          from importlib import import_module
+          settings_mod = os.environ.get("DJANGO_SETTINGS_MODULE")
+          if not settings_mod:
+            sys.exit("DJANGO_SETTINGS_MODULE not set")
+          print(f"Running Django checks for {settings_mod}…")
+          try:
+              import django
+              from django.core.management import call_command
+          except Exception as e:
+              raise SystemExit(f"Django not installed or import error: {e}")
+          django.setup()
+          call_command("check")
+          PY
+
+      - name: Tests (pytest)
+        if: ${{ inputs.run_tests }}
+        run: |
+          mkdir -p ./test-results ./coverage
+          pytest -q --maxfail=1 --disable-warnings --junitxml=./test-results/junit.xml || exit $?
+
+      - name: Upload artefacts tests
+        if: ${{ inputs.run_tests && inputs.upload_test_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ${{ inputs.working_directory }}/test-results/**
+            ${{ inputs.working_directory }}/.pytest_cache/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: CodeQL init (Python)
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - name: CodeQL analyze
+        uses: github/codeql-action/analyze@v3
+
+      - name: Login GHCR (si build image)
+        if: ${{ inputs.docker_image_name != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Docker image (optionnel)
+        if: ${{ inputs.docker_image_name != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.docker_context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: |
+            ghcr.io/${{ inputs.docker_image_name }}:${{ github.sha }}
+            ghcr.io/${{ inputs.docker_image_name }}:ci-${{ github.run_number }}
+          build-args: ${{ inputs.docker_build_args }}
+
+      - name: OIDC to Cloud (optionnel)
+        if: ${{ secrets.CLOUD_ROLE != '' }}
+        run: |
+          echo "Assume cloud role with OIDC here (AWS/GCP/Azure)…"
+          # Exemple AWS:
+          # aws sts assume-role-with-web-identity --role-arn "$CLOUD_ROLE" --role-session-name ci-session --web-identity-token "$ACTIONS_ID_TOKEN_REQUEST_TOKEN"
