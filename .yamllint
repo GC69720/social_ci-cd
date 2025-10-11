@@ -8,6 +8,9 @@ ignore: |
   core/openapi/generated/*
 
 rules:
-  # on reste strict partout ailleurs
-  document-start: enable
-  # sécurité: on garde les autres règles par défaut
+  document-start: enable     # exige '---' (bonne pratique)
+  line-length: disable       # compose/OpenAPI -> lignes longues acceptées
+  braces: disable            # tolère { key: value } inline
+  truthy: disable            # évite les faux positifs sur 'on', 'yes', etc.
+  empty-lines:
+    max: 2
