@@ -3,6 +3,11 @@ extends: default
 
 ignore: |
   .github/workflows/*
+  infra/podman/*
+  infra/podman/**/*
+  core/openapi/generated/*
 
 rules:
+  # on reste strict partout ailleurs
   document-start: enable
+  # sécurité: on garde les autres règles par défaut

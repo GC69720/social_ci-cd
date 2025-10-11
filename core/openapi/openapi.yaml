@@ -2,9 +2,9 @@
 openapi: 3.0.3
 info:
   title: Template API
-  version: 0.1.0
+  version: "0.1.0"
 paths:
-  /health:
+  /status:
     get:
       summary: Healthcheck
       responses:
@@ -15,25 +15,26 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: {type:string}
+                  status: { type: string }
   /users:
     get:
       summary: List users
       responses:
         "200":
-          description: list
+          description: Users list
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+
 components:
   schemas:
     User:
       type: object
-      required: [id,email]
+      required: [id, email]
       properties:
-        id: {type:string,format:uuid}
-        email: {type:string,format:email}
-        displayName: {type:string}
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
