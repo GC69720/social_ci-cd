@@ -16,19 +16,19 @@ on:
         type: string
         default: "Containerfile"
       tags:
-        description: "Tags à pousser (séparés par des espaces ou nouvelles lignes)"
+        description: "Tags à pousser (séparés par des espaces ou lignes)"
         type: string
         default: ""
       build_args:
-        description: "Args de build (KEY=VAL lignes séparées)"
+        description: "Args de build (KEY=VAL par ligne)"
         type: string
         default: ""
     secrets: {}
 
 permissions:
   contents: read
-  packages: write   # push GHCR
-  id-token: write   # OIDC si besoin plus tard
+  packages: write
+  id-token: write
 
 jobs:
   build-push:
@@ -38,7 +38,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Login GHCR (username = acteur GitHub ; token = GITHUB_TOKEN)
       - name: Login to GHCR (Podman)
         uses: redhat-actions/podman-login@v1
         with:
@@ -46,12 +45,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build image avec Buildah (dans le contexte et Containerfile donnés)
       - name: Build image with Buildah
         id: buildah
         uses: redhat-actions/buildah-build@v2
         with:
-          image: ${{ inputs.image_name }}
+          image: ${{ inputs.image_name }}     # ex: ghcr.io/gc69720/social-backend
           context: ${{ inputs.context }}
           containerfiles: ${{ inputs.containerfile }}
           oci: true
@@ -59,11 +57,11 @@ jobs:
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: ${{ inputs.build_args }}
-          tags: ${{ inputs.tags }}
+          tags: ${{ inputs.tags }}            # ex: "ci-${{ github.run_number }} ${{ github.sha }}"
 
-      # Push toutes les references (tags) construites
       - name: Push to GHCR
         uses: redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.buildah.outputs.image }}
           tags: ${{ steps.buildah.outputs.tags }}
+          registry: ghcr.io                  # ✅ indispensable avec des tags courts
