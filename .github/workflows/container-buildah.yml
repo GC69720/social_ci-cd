@@ -1,0 +1,69 @@
+name: container-buildah
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: "Nom d'image cible (ex: ghcr.io/ORG/APP)"
+        type: string
+        required: true
+      context:
+        description: "Contexte de build (dossier)"
+        type: string
+        default: "."
+      containerfile:
+        description: "Chemin du Containerfile"
+        type: string
+        default: "Containerfile"
+      tags:
+        description: "Tags à pousser (séparés par des espaces ou nouvelles lignes)"
+        type: string
+        default: ""
+      build_args:
+        description: "Args de build (KEY=VAL lignes séparées)"
+        type: string
+        default: ""
+    secrets: {}
+
+permissions:
+  contents: read
+  packages: write   # push GHCR
+  id-token: write   # OIDC si besoin plus tard
+
+jobs:
+  build-push:
+    name: Build & Push (Buildah/Podman)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Login GHCR (username = acteur GitHub ; token = GITHUB_TOKEN)
+      - name: Login to GHCR (Podman)
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build image avec Buildah (dans le contexte et Containerfile donnés)
+      - name: Build image with Buildah
+        id: buildah
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ inputs.image_name }}
+          context: ${{ inputs.context }}
+          containerfiles: ${{ inputs.containerfile }}
+          oci: true
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: ${{ inputs.build_args }}
+          tags: ${{ inputs.tags }}
+
+      # Push toutes les references (tags) construites
+      - name: Push to GHCR
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.buildah.outputs.image }}
+          tags: ${{ steps.buildah.outputs.tags }}
