@@ -1,3 +1,4 @@
+---
 openapi: 3.0.3
 info:
   title: Template API
@@ -14,7 +15,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string }
+                  status: {type:string}
   /users:
     get:
       summary: List users
@@ -31,8 +32,8 @@ components:
   schemas:
     User:
       type: object
-      required: [id, email]
+      required: [id,email]
       properties:
-        id: { type: string, format: uuid }
-        email: { type: string, format: email }
-        displayName: { type: string }
+        id: {type:string,format:uuid}
+        email: {type:string,format:email}
+        displayName: {type:string}
