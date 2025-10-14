@@ -20,7 +20,7 @@ on:
 permissions:
   contents: read
   id-token: write     # requis pour cosign keyless (OIDC)
-  packages: read      # pull depuis GHCR privé
+  packages: write     # ⬅️ nécessaire pour pousser la signature dans GHCR
 
 jobs:
   sbom-sign:
@@ -30,7 +30,7 @@ jobs:
       - name: Checkout (meta only)
         uses: actions/checkout@v4
 
-      # Login GHCR pour autoriser le pull par Syft/Cosign
+      # Auth GHCR pour Syft/Cosign pull/push
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -38,8 +38,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Génération du SBOM (SPDX JSON) via Syft
-      # NOTE: pas d'inputs non supportés ; on passe les creds via env si besoin
+      # SBOM SPDX JSON via Syft (avec auth via env)
       - name: Generate SBOM (Syft)
         if: ${{ inputs.generate_spdx }}
         uses: anchore/syft-action@v0.17.0
@@ -68,6 +67,7 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
+          # signature keyless; nécessite id-token: write + packages: write
           cosign sign --yes ${{ inputs.image }}
 
       - name: Verify signature
