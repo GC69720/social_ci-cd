@@ -5,7 +5,7 @@ on:
     inputs:
       image: { type: string, required: true }
       generate_spdx: { type: boolean, default: true }
-      sign_image: { type: boolean, default: false }  # <-- défaut: pas de signature pour stabiliser
+      sign_image: { type: boolean, default: false }
     secrets: {}
 
 jobs:
