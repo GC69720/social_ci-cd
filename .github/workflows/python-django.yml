@@ -1,38 +1,15 @@
-name: python-django (reusable)
+name: python-django
+
 on:
   workflow_call:
     inputs:
-      python_version:
-        type: string
-        required: false
-        default: "3.12"
-      working_directory:
-        type: string
-        required: false
-        default: "."
-      run_tests:
-        type: boolean
-        required: false
-        default: true
-      upload_test_artifacts:
-        type: boolean
-        required: false
-        default: true
-      django_settings_module:
-        type: string
-        required: false
-        default: "app.settings"
-      enable_codeql:
-        type: boolean
-        required: false
-        default: true
-      docker_image_name:
-        type: string
-        required: false
-        default: ""
-    secrets:
-      GHCR_TOKEN:
-        required: false
+      python_version: { type: string, default: "3.12" }
+      working_directory: { type: string, default: "." }
+      django_settings_module: { type: string, default: "app.settings" }
+      run_tests: { type: boolean, default: true }
+      upload_test_artifacts: { type: boolean, default: true }
+      enable_codeql: { type: boolean, default: true }
+    secrets: {}
 
 jobs:
   app:
@@ -41,8 +18,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      packages: write
-      id-token: write
 
     services:
       postgres:
@@ -51,7 +26,7 @@ jobs:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app
           POSTGRES_DB: appdb
-        ports: [ "5432:5432" ]
+        ports: ["5432:5432"]
         options: >-
           --health-cmd="pg_isready -U app -d appdb"
           --health-interval=10s
@@ -65,8 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
 
@@ -88,16 +62,16 @@ jobs:
       - name: Django checks & migrate
         working-directory: ${{ inputs.working_directory }}
         run: |
-          python manage.py check
-          python manage.py migrate --noinput || true
+          if [ -f manage.py ]; then python manage.py check; fi
+          if [ -f manage.py ]; then python manage.py migrate --noinput || true; fi
 
       - name: Run tests
         if: ${{ inputs.run_tests }}
         working-directory: ${{ inputs.working_directory }}
         run: |
-          if [ -f manage.py ]; then python manage.py test -v 2; fi
+          if [ -f manage.py ]; then python manage.py test -v 2; else echo "No manage.py, skipping."; fi
 
-      - name: Upload junit/coverage
+      - name: Upload test reports
         if: ${{ inputs.upload_test_artifacts }}
         uses: actions/upload-artifact@v4
         with:
@@ -113,6 +87,6 @@ jobs:
         with:
           languages: python
 
-      - name: Perform CodeQL Analysis
+      - name: Analyze (CodeQL)
         if: ${{ inputs.enable_codeql }}
         uses: github/codeql-action/analyze@v3
