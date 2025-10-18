@@ -5,7 +5,7 @@ on:
     inputs:
       image: { type: string, required: true }
       generate_spdx: { type: boolean, default: true }
-      sign_image: { type: boolean, default: false }
+      sign_image: { type: boolean, default: true }
     secrets: {}
 
 jobs:
@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: read
-      id-token: write
+      packages: write    # ✅ nécessaire pour pousser la signature vers GHCR
+      id-token: write    # ✅ nécessaire pour OIDC (cosign keyless)
 
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +50,11 @@ jobs:
         if: ${{ inputs.sign_image }}
         env:
           COSIGN_EXPERIMENTAL: "1"
-        run: cosign sign --yes ${{ inputs.image }}
+        run: |
+          # --yes pour non-interactif ; la permission packages:write est requise
+          cosign sign --yes ${{ inputs.image }}
 
       - name: Cosign verify
         if: ${{ inputs.sign_image }}
-        run: cosign verify ${{ inputs.image }} | head -n 50 || exit 1
+        run: |
+          cosign verify ${{ inputs.image }} | head -n 50 || exit 1

@@ -1,35 +1,35 @@
-SHELL := /bin/bash
+SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-help: ## Liste des commandes
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-24s\033[0m %s\n", $$1, $$2}'
+# ========================
+# Variables (surpassables)
+# ========================
+OWNER       ?= GC69720
+TPL_REPO    ?= social_ci-cd
+APP_REPO    ?= social_applicatif
+COMPONENT   ?= oci-sbom-sign.yml   # ex: oci-sbom-sign.yml ou python-django.yml
+NEW_TAG     ?=                     # ex: v1.1.2  (OBLIGATOIRE)
+APP_BRANCH  ?= main
+GH_HOST     ?= github.com
 
-init: ## Init dev (pre-commit + deps backend/web/mobile)
-	python3 -m venv .venv && source .venv/bin/activate && pip install -U pip pre-commit
-	pre-commit install
-	cd backend && pip install -r requirements-dev.txt
-	cd web && npm ci
-	cd mobile && npm ci
+# ================
+# Targets publics
+# ================
+.PHONY: help
+help:
+	@echo "Targets:"
+	@echo "  make release-template NEW_TAG=vX.Y.Z [COMPONENT=oci-sbom-sign.yml] [OWNER=GC69720] [TPL_REPO=social_ci-cd] [APP_REPO=social_applicatif]"
+	@echo
+	@echo "Exemples:"
+	@echo "  make release-template NEW_TAG=v1.1.2 COMPONENT=oci-sbom-sign.yml"
+	@echo "  make release-template NEW_TAG=v1.2.0 COMPONENT=python-django.yml"
 
-dev: ## Lance podman-compose (backend + db + web + redis + mongo)
-	podman-compose -f infra/podman/podman-compose.dev.yml up --build
-
-down: ## Stoppe l'environnement dev
-	podman-compose -f infra/podman/podman-compose.dev.yml down
-
-test: ## Tests (backend)
-	cd backend && PYTHONPATH=src pytest -q
-
-lint: ## Lint (backend + web)
-	cd backend && ruff check . && black --check .
-	cd web && npm run lint
-
-format: ## Format (backend + web)
-	cd backend && ruff format . && black .
-	cd web && npm run format
-
-sdk: ## Génère SDK depuis OpenAPI
-	bash core/scripts/generate-sdk.sh || pwsh core/scripts/generate-sdk.ps1
-
-sbom: ## Génère SBOM (si syft installé)
-	syft packages dir:. -o json > sbom.json || true
+.PHONY: release-template
+release-template:
+	@if [[ -z "$(NEW_TAG)" ]]; then \
+		echo "ERREUR: NEW_TAG est obligatoire (ex: NEW_TAG=v1.1.2)"; exit 2; \
+	fi
+	@bash ./scripts/release-template.sh \
+		"$(OWNER)" "$(TPL_REPO)" "$(APP_REPO)" \
+		"$(COMPONENT)" "$(NEW_TAG)" \
+		"$(APP_BRANCH)" "$(GH_HOST)"
