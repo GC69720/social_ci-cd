@@ -18,9 +18,9 @@ on:
     secrets: {}
 
 permissions:
-  contents: write    # <- requis pour l’upload d’artefacts par sbom-action
-  id-token: write    # <- requis pour cosign keyless
-  packages: write    # <- push/refs (signatures) vers GHCR
+  contents: read          # suffisant (écrire dans 'releases' nécessiterait contents: write)
+  id-token: write         # requis pour cosign keyless (OIDC)
+  packages: write         # cosign pousse les signatures sur GHCR
 
 jobs:
   sbom-sign:
@@ -30,7 +30,7 @@ jobs:
       - name: Checkout (meta only)
         uses: actions/checkout@v4
 
-      # Login GHCR (permet à sbom-action de tirer une image privée si besoin)
+      # Auth GHCR (images privées)
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -38,14 +38,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ✅ Remplacement de anchore/syft-action -> anchore/sbom-action
+      # ✅ Générer le SBOM avec l’action officielle Anchore
       - name: Generate SBOM (Syft via sbom-action)
         if: ${{ inputs.generate_spdx }}
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ inputs.image }}         # scanne l'image construite
+          image: ${{ inputs.image }}
           format: spdx-json
-          artifact-name: sbom.spdx.json      # nom d’artefact stable
+          output-file: sbom.spdx.json   # fichier stable dans le workspace
+
+      # (optionnel mais pratique) Uploader le SBOM comme artifact de run
+      - name: Upload SBOM artifact
+        if: ${{ inputs.generate_spdx }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: sbom.spdx.json
+          retention-days: 7
 
       - name: Install Cosign
         if: ${{ inputs.sign_image }}
