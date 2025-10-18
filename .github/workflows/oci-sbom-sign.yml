@@ -5,7 +5,7 @@ on:
     inputs:
       image: { type: string, required: true }
       generate_spdx: { type: boolean, default: true }
-      sign_image: { type: boolean, default: true }
+      sign_image: { type: boolean, default: false }  # <-- défaut: pas de signature pour stabiliser
     secrets: {}
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
+      packages: read
       id-token: write
 
     steps:
@@ -26,7 +26,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate SBOM (Syft via Anchore)
+      - name: Generate SBOM (Anchore sbom-action)
         if: ${{ inputs.generate_spdx }}
         uses: anchore/sbom-action@v0
         with:
