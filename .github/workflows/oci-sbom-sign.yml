@@ -18,9 +18,9 @@ on:
     secrets: {}
 
 permissions:
-  contents: read
-  id-token: write     # requis pour cosign keyless (OIDC)
-  packages: write     # ⬅️ nécessaire pour pousser la signature dans GHCR
+  contents: write    # <- requis pour l’upload d’artefacts par sbom-action
+  id-token: write    # <- requis pour cosign keyless
+  packages: write    # <- push/refs (signatures) vers GHCR
 
 jobs:
   sbom-sign:
@@ -30,7 +30,7 @@ jobs:
       - name: Checkout (meta only)
         uses: actions/checkout@v4
 
-      # Auth GHCR pour Syft/Cosign pull/push
+      # Login GHCR (permet à sbom-action de tirer une image privée si besoin)
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -38,25 +38,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # SBOM SPDX JSON via Syft (avec auth via env)
-      - name: Generate SBOM (Syft)
+      # ✅ Remplacement de anchore/syft-action -> anchore/sbom-action
+      - name: Generate SBOM (Syft via sbom-action)
         if: ${{ inputs.generate_spdx }}
-        uses: anchore/syft-action@v0.17.0
-        env:
-          SYFT_REGISTRY_AUTH_USERNAME: ${{ github.actor }}
-          SYFT_REGISTRY_AUTH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        uses: anchore/sbom-action@v0
         with:
-          image: ${{ inputs.image }}
+          image: ${{ inputs.image }}         # scanne l'image construite
           format: spdx-json
-          output: sbom.spdx.json
-
-      - name: Upload SBOM (artifact)
-        if: ${{ inputs.generate_spdx }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-spdx
-          path: sbom.spdx.json
-          retention-days: 7
+          artifact-name: sbom.spdx.json      # nom d’artefact stable
 
       - name: Install Cosign
         if: ${{ inputs.sign_image }}
@@ -67,7 +56,6 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          # signature keyless; nécessite id-token: write + packages: write
           cosign sign --yes ${{ inputs.image }}
 
       - name: Verify signature
