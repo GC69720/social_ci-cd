@@ -1,0 +1,122 @@
+---
+# .github/workflows/backend-ci.yml
+name: Reusable Backend CI
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: "Tag de l'image à construire"
+        type: string
+        required: false
+        default: ${{ github.sha }}
+      image-name:
+        description: "Nom complet de l'image (ex: ghcr.io/OWNER/social-backend)"
+        type: string
+        required: false
+        default: ghcr.io/${{ github.repository_owner }}/social-backend
+      push-image:
+        description: "Pousser l'image vers le registre"
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      REGISTRY_USERNAME:
+        required: false
+      REGISTRY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+  packages: write   # nécessaire pour publier sur GHCR avec GITHUB_TOKEN
+
+jobs:
+  backend-ci:
+    name: Lint • Tests • Build image
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: ${{ inputs.image-name }}
+      IMAGE_TAG: ${{ inputs.image-tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Installer dépendances (si requirements.txt existe)
+        if: ${{ hashFiles('backend/requirements.txt') != '' }}
+        run: |
+          pip install -r backend/requirements.txt
+          pip install flake8 pytest
+
+      - name: Lint (flake8) si des .py existent
+        run: |
+          set -e
+          if compgen -G "backend/**/*.py" > /dev/null || compgen -G "backend/*.py" > /dev/null; then
+            echo "Python files trouvés, lancement flake8"
+            flake8 backend --count --max-line-length=120 --show-source --statistics
+          else
+            echo "Aucun .py dans backend/, étape lint ignorée."
+          fi
+
+      - name: Tests (pytest) si des tests existent
+        run: |
+          set -e
+          if [ -d "backend/tests" ] || ls backend/test_*.py >/dev/null 2>&1 || ls backend/**/*test*.py >/dev/null 2>&1; then
+            echo "Tests détectés, exécution pytest"
+            pytest -q backend
+          else
+            echo "Pas de tests détectés, étape tests ignorée."
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Authentification : priorise REGISTRY_USERNAME/PASSWORD si fournis,
+      # sinon utilise GHCR via GITHUB_TOKEN
+      - name: Login registry (via secrets REGISTRY_*)
+        if: ${{ inputs.push-image && secrets.REGISTRY_USERNAME && secrets.REGISTRY_PASSWORD }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ${{ contains(inputs.image-name, 'ghcr.io') && 'ghcr.io' || '' }}
+
+      - name: Login GHCR (fallback via GITHUB_TOKEN)
+        if: ${{ inputs.push-image && (!secrets.REGISTRY_USERNAME || !secrets.REGISTRY_PASSWORD) && contains(inputs.image-name, 'ghcr.io') }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire l'image (sans push)
+        if: ${{ !inputs.push-image }}
+        run: |
+          docker buildx build \
+            --file backend/Dockerfile \
+            --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
+            --load \
+            .
+
+      - name: Construire & pousser l'image
+        if: ${{ inputs.push-image }}
+        run: |
+          docker buildx build \
+            --file backend/Dockerfile \
+            --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
+            --push \
+            .
