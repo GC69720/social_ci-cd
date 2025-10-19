@@ -17,7 +17,7 @@ services:
     restart: always
 
   api:
-    image: ghcr.io/ORG/reseau-api:${API_TAG}
+    image: ghcr.io/gc69720/reseau-api:${API_TAG}
     env_file: ./env/prod/api.env
     depends_on:
       db:
@@ -38,7 +38,7 @@ services:
     restart: always
 
   web:
-    image: ghcr.io/ORG/reseau-web:${WEB_TAG}
+    image: ghcr.io/gc69720/reseau-web:${WEB_TAG}
     env_file: ./env/prod/web.env
     deploy:
       resources:

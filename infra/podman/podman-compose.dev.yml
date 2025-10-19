@@ -16,7 +16,7 @@ services:
       retries: 20
 
   api:
-    image: ghcr.io/ORG/reseau-api:dev
+    image: ghcr.io/gc69720/reseau-api:dev
     env_file: ./env/dev/api.env
     depends_on:
       db:
@@ -29,7 +29,7 @@ services:
       - "8000:8000"
 
   web:
-    image: ghcr.io/ORG/reseau-web:dev
+    image: ghcr.io/gc69720/reseau-web:dev
     env_file: ./env/dev/web.env
     command: ["bash", "-lc", "npm run dev -- --host"]
     ports:
