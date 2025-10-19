@@ -1,4 +1,3 @@
----
 # .github/workflows/backend-ci.yml
 name: Reusable Backend CI
 
@@ -38,6 +37,10 @@ jobs:
     env:
       IMAGE_NAME: ${{ inputs.image-name }}
       IMAGE_TAG: ${{ inputs.image-tag }}
+      # on expose les secrets dans l'env (vides si non fournis)
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      IS_GHCR: ${{ contains(inputs.image-name, 'ghcr.io') }}
 
     steps:
       - name: Checkout
@@ -85,18 +88,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Authentification : priorise REGISTRY_USERNAME/PASSWORD si fournis,
-      # sinon utilise GHCR via GITHUB_TOKEN
+      # Auth custom registry si credentials fournis (test via ENV, pas via secrets.* dans if)
       - name: Login registry (via secrets REGISTRY_*)
-        if: ${{ inputs.push-image && secrets.REGISTRY_USERNAME && secrets.REGISTRY_PASSWORD }}
+        if: ${{ inputs.push-image && env.REGISTRY_USERNAME != '' && env.REGISTRY_PASSWORD != '' }}
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-          registry: ${{ contains(inputs.image-name, 'ghcr.io') && 'ghcr.io' || '' }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ${{ env.IS_GHCR == 'true' && 'ghcr.io' || '' }}
 
+      # Fallback GHCR via GITHUB_TOKEN si on pousse et qu'on cible ghcr.io sans credentials custom
       - name: Login GHCR (fallback via GITHUB_TOKEN)
-        if: ${{ inputs.push-image && (!secrets.REGISTRY_USERNAME || !secrets.REGISTRY_PASSWORD) && contains(inputs.image-name, 'ghcr.io') }}
+        if: ${{ inputs.push-image && env.IS_GHCR == 'true' && (env.REGISTRY_USERNAME == '' || env.REGISTRY_PASSWORD == '') }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
