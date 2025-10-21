@@ -1,0 +1,8 @@
+services:
+  backend:
+    environment:
+      # Rendez le dev permissif :
+      DEBUG: "1"                    # pour settings qui lisent DEBUG
+      DJANGO_DEBUG: "True"          # pour settings qui lisent DJANGO_DEBUG
+      ALLOWED_HOSTS: "localhost,127.0.0.1,[::1],*"      # variante générique
+      DJANGO_ALLOWED_HOSTS: "*"                         # autre variante courante
