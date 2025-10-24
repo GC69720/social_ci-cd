@@ -14,7 +14,7 @@
 
 ```mermaid
 flowchart LR
-    user((Utilisateur)) -->|HTTPs| web[Frontend Web]
+    user((Utilisateur)) -->|HTTPS| web[Frontend Web]
     web -->|REST/JSON| api[API Django]
     api -->|SQL| db[(PostgreSQL)]
     api -->|Objets| media[(Stockage médias)]
