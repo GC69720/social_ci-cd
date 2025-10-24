@@ -87,16 +87,38 @@ msg
 
 command -v podman >/dev/null 2>&1 || die "'podman' est introuvable dans le PATH. Installe Podman (voir README)."
 
+sanitize_machine_identifier() {
+  local raw="$1"
+  raw="${raw%%\**}"          # Retire un éventuel marqueur '*' de la machine active
+  raw="${raw//$'\r'/}"        # Supprime les retours chariot Windows
+  raw="${raw//[$'\n\t ']/}" # Trim rudimentaire des espaces, tabulations et fins de ligne
+  echo "${raw}"
+}
+
+resolve_podman_machine_name() {
+  if [[ -n "${PODMAN_MACHINE_NAME}" ]]; then
+    PODMAN_MACHINE_NAME="$(sanitize_machine_identifier "${PODMAN_MACHINE_NAME}")"
+    return
+  fi
+
+  local detected=""
+  if podman machine list --format '{{.Name}}' >/dev/null 2>&1; then
+    detected=$(podman machine list --format '{{.Name}}' 2>/dev/null | head -n1)
+  else
+    detected=$(podman machine list 2>/dev/null | awk 'NR>1 && NF {print $1; exit}')
+  fi
+
+  PODMAN_MACHINE_NAME="$(sanitize_machine_identifier "${detected}")"
+}
+
 ensure_podman_machine_running() {
+  resolve_podman_machine_name
+
   if podman info >/dev/null 2>&1; then
     return 0
   fi
 
   msg "==> Podman ne répond pas, tentative de démarrage de la VM…"
-
-  if [[ -z "${PODMAN_MACHINE_NAME}" ]]; then
-    PODMAN_MACHINE_NAME=$(podman machine list --format '{{.Name}}\t{{.Running}}' 2>/dev/null | head -n1 | cut -f1)
-  fi
 
   if [[ -z "${PODMAN_MACHINE_NAME}" ]]; then
     die "Aucune VM Podman détectée. Lance 'podman machine init' puis 'podman machine start'."
@@ -118,9 +140,7 @@ install_enterprise_ca() {
 
   [[ -f "${ca_path}" ]] || die "Certificat entreprise introuvable: ${ca_path}"
 
-  if [[ -z "${PODMAN_MACHINE_NAME}" ]]; then
-    PODMAN_MACHINE_NAME=$(podman machine list --format '{{.Name}}\t{{.Running}}' 2>/dev/null | head -n1 | cut -f1)
-  fi
+  resolve_podman_machine_name
 
   if [[ -z "${PODMAN_MACHINE_NAME}" ]]; then
     die "Impossible de déterminer la VM Podman pour l'injection du CA. Utilise PODMAN_MACHINE_NAME=<nom>."
