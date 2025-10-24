@@ -76,7 +76,7 @@ case "${ENV_NAME}" in
     ;;
   *) die "ENV invalide: ${ENV_NAME} (attendu: dev|stage|prod)";;
 esac
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-change-me-strong}"
+
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-${DEFAULT_POSTGRES_PASSWORD}}"
 
 # -------- Auto-detect curl / sleep
