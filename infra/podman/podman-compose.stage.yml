@@ -1,107 +1,55 @@
 ---
-version: "3.8"
+version: "3.9"
 
 services:
-  # -------------------------------------------------------------
-  # 🗄️ Base de données PostgreSQL
-  # -------------------------------------------------------------
   db:
-    image: docker.io/library/postgres:16
-    restart: unless-stopped
-    env_file:
-      - ../env/stage/db.env
+    image: docker.io/postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_USER: social
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-MyStrongPwd123!}
-      POSTGRES_DB: ${POSTGRES_DB:-app}
-    volumes:
-      - db-data-stage:/var/lib/postgresql/data
+      POSTGRES_DB: socialdb
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -U social"]
       interval: 10s
-      timeout: 5s
       retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432"
 
-  # -------------------------------------------------------------
-  # ⚙️ Backend Django (API)
-  # -------------------------------------------------------------
   api:
-    image: ghcr.io/gc69720/reseau-api:${API_TAG:-dev}
-    restart: unless-stopped
+    image: ghcr.io/gc69720/reseau-api:${API_TAG:-stage}
+    depends_on:
+      - db
     env_file:
-      - ../env/stage/api.env
-    depends_on:
-      db:
-        condition: service_healthy
-    command: >
-      sh -lc '
-        echo "[api] Waiting for DB (pg_isready)…";
-        until pg_isready -h ${POSTGRES_HOST:-db} -p ${POSTGRES_PORT:-5432} -U ${POSTGRES_USER:-app}; do
-          echo "⏳ DB not ready, retrying...";
-          sleep 2;
-        done;
-        echo "[api] DB ready ✅";
-        echo "[api] Apply migrations...";
-        python manage.py migrate --noinput || exit 1;
-        echo "[api] Starting Django server...";
-        if command -v gunicorn >/dev/null 2>&1; then
-          exec gunicorn social_applicatif.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4 --timeout 60;
-        else
-          exec python manage.py runserver 0.0.0.0:8000;
-        fi
-      '
-    expose:
+      - ../../.env.stage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 10
+    ports:
       - "8000"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 10
 
-  # -------------------------------------------------------------
-  # 💻 Frontend React
-  # -------------------------------------------------------------
   web:
-    image: ghcr.io/gc69720/reseau-web:${WEB_TAG:-dev}
-    restart: unless-stopped
+    image: ghcr.io/gc69720/reseau-web:${WEB_TAG:-stage}
     depends_on:
-      api:
-        condition: service_healthy
-    expose:
+      - api
+    ports:
       - "80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 10
 
-  # -------------------------------------------------------------
-  # 🌐 NGINX Reverse Proxy
-  # -------------------------------------------------------------
   nginx:
     image: docker.io/library/nginx:1.27-alpine
-    restart: unless-stopped
     depends_on:
-      web:
-        condition: service_healthy
-      api:
-        condition: service_started
+      - web
+      - api
     ports:
       - "8080:80"
       - "8443:443"
     volumes:
-      - ../nginx/stage.conf:/etc/nginx/conf.d/default.conf:ro
-      - ../nginx/snippets/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
-      - ../certs/stage:/etc/nginx/certs:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 10
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./infra/podman/nginx/html:/usr/share/nginx/html:ro
+    restart: unless-stopped
 
-# -------------------------------------------------------------
-# 🗃️ Volumes persistants
-# -------------------------------------------------------------
 volumes:
-  db-data-stage:
-    name: db-data-stage
+  db_data:
