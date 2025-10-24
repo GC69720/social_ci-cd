@@ -1,151 +1,145 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Restart the staging environment end-to-end (build, deploy, health-check).
+#
+# The script assumes passwordless SSH access (public key) to the staging host and
+# requires a container runtime that supports the `compose` subcommand (Docker or
+# Podman 4.0+). All parameters can be provided through environment variables or a
+# dotenv file (see `ENV_FILE`).
+set -Eeuo pipefail
 
-# -------------------------------------------------------------------
-# 🚀 Restart complet de la stack STAGE (Podman Compose)
-# Compatible Git Bash (Windows)
-# -------------------------------------------------------------------
+# ----------------------------- configuration ---------------------------------
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 
-die() { echo "ERREUR: $*" >&2; exit 1; }
-msg() { echo -e "$*"; }
-
-CURL_BIN="${CURL_BIN:-$(command -v curl || true)}"
-SLEEP_BIN="${SLEEP_BIN:-$(command -v sleep || true)}"
-[[ -z "${CURL_BIN}" || -z "${SLEEP_BIN}" ]] && die "curl ou sleep introuvable dans le PATH."
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REL_COMPOSE_FILE="infra/podman/podman-compose.stage.yml"
-COMPOSE_PATH="${REPO_ROOT}/${REL_COMPOSE_FILE}"
-
-STAGE_HOST="preprod.social_applicatif.com"
-HTTP_PORT=8080
-HTTPS_PORT=8443
-
-: "${API_TAG:=stage}"
-: "${WEB_TAG:=stage}"
-: "${POSTGRES_PASSWORD:=MyStrongPwd123!}"
-
-msg "==> Repo root        : ${REPO_ROOT}"
-msg "==> Compose (relatif): ${REL_COMPOSE_FILE}"
-msg "==> API_TAG          : ${API_TAG}"
-msg "==> WEB_TAG          : ${WEB_TAG}"
-msg
-
-# -------------------------------------------------------------------
-# [1] Purge Podman
-# -------------------------------------------------------------------
-msg "==> [Préflight] Purge de l'environnement Podman..."
-podman stop -a >/dev/null 2>&1 || true
-podman rm -a -f >/dev/null 2>&1 || true
-podman pod rm -a -f >/dev/null 2>&1 || true
-podman network rm podman_default >/dev/null 2>&1 || true
-podman volume prune -f >/dev/null 2>&1 || true
-msg "✅ Environnement nettoyé."
-msg
-
-# -------------------------------------------------------------------
-# [2] Certificats SSL auto-signés
-# -------------------------------------------------------------------
-msg "==> [Préflight] Vérification des certificats SSL..."
-CERTS_DIR="${REPO_ROOT}/infra/podman/certs"
-
-# création du dossier Windows-safe
-if [[ ! -d "${CERTS_DIR}" ]]; then
-  msg "Création du dossier certificats via Windows..."
-  cmd.exe /C "mkdir \"$(cygpath -w "${CERTS_DIR}")\"" >/dev/null 2>&1 || true
+DEFAULT_ENV_FILE="$ROOT_DIR/.env.stage"
+if [[ ! -f "$DEFAULT_ENV_FILE" && -f "$SCRIPT_DIR/.env.stage" ]]; then
+  DEFAULT_ENV_FILE="$SCRIPT_DIR/.env.stage"
 fi
+ENV_FILE=${ENV_FILE:-$DEFAULT_ENV_FILE}
 
-CRT_FILE="${CERTS_DIR}/localhost.crt"
-KEY_FILE="${CERTS_DIR}/localhost.key"
+log() {
+  local level="$1"; shift
+  printf '[%s] [%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$level" "$*" >&2
+}
 
-CRT_FILE_WIN="$(cygpath -m "${CRT_FILE}")"
-KEY_FILE_WIN="$(cygpath -m "${KEY_FILE}")"
+die() {
+  local code=${2:-1}
+  log "ERROR" "$1"
+  exit "$code"
+}
 
-if [[ ! -f "${CRT_FILE}" || ! -f "${KEY_FILE}" ]]; then
-  msg "🔧 Génération du certificat auto-signé pour 'localhost'..."
-  export MSYS_NO_PATHCONV=1
-  export MSYS2_ARG_CONV_EXCL="*"
-  openssl req -x509 -newkey rsa:4096 -nodes \
-    -keyout "${KEY_FILE_WIN}" -out "${CRT_FILE_WIN}" -days 365 \
-    -subj "//CN=localhost" \
-    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
-    || die "Échec de la génération du certificat SSL."
-  msg "✅ Certificats générés dans : ${CERTS_DIR}"
+if [[ -n "${ENV_FILE:-}" && -f "$ENV_FILE" ]]; then
+  log INFO "Loading environment from $ENV_FILE"
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
 else
-  msg "✅ Certificats déjà présents dans : ${CERTS_DIR}"
+  log INFO "No env file found at ${ENV_FILE:-<unset>} (skipping)"
 fi
-msg
 
-# -------------------------------------------------------------------
-# [3] Copie vers NGINX
-# -------------------------------------------------------------------
-msg "==> [Préflight] Synchronisation des certificats vers NGINX..."
-NGINX_CERTS_DIR="${REPO_ROOT}/infra/podman/nginx/certs"
-mkdir -p "${NGINX_CERTS_DIR}"
-cp -f "${CRT_FILE}" "${NGINX_CERTS_DIR}/server.crt"
-cp -f "${KEY_FILE}" "${NGINX_CERTS_DIR}/server.key"
-msg "✅ Certificats copiés dans : ${NGINX_CERTS_DIR}"
-msg
+# Required configuration keys
+REQUIRED_VARS=(
+  STAGE_SSH_HOST
+  STAGE_SSH_USER
+  STAGE_PROJECT_DIR
+  STAGE_COMPOSE_FILE
+)
 
-# -------------------------------------------------------------------
-# [4] Redémarrage stack
-# -------------------------------------------------------------------
-[[ -f "${COMPOSE_PATH}" ]] || die "Fichier compose introuvable : ${COMPOSE_PATH}"
-command -v podman >/dev/null 2>&1 || die "'podman' introuvable dans le PATH."
-
-pushd "${REPO_ROOT}" >/dev/null
-export MSYS2_ARG_CONV_EXCL="*"
-
-msg "==> [1/4] Arrêt de la stack (down)…"
-podman-compose -f "${REL_COMPOSE_FILE}" down || true
-
-msg "==> [2/4] Pull des images (si nécessaire)…"
-API_TAG="${API_TAG}" WEB_TAG="${WEB_TAG}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-podman-compose -f "${REL_COMPOSE_FILE}" pull || true
-
-msg "==> [3/4] Démarrage des services…"
-API_TAG="${API_TAG}" WEB_TAG="${WEB_TAG}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-podman-compose -f "${REL_COMPOSE_FILE}" up -d
-
-msg "==> [4/4] Vérification du statut des containers…"
-sleep 5
-podman ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "podman_(db|api|web|nginx)_1" || true
-msg
-
-# -------------------------------------------------------------------
-# [5] Vérifications
-# -------------------------------------------------------------------
-msg "==> [Post-check] Vérifications de santé..."
-"${CURL_BIN}" -sS -I "http://localhost:${HTTP_PORT}" | head -n 1 || true
-"${CURL_BIN}" -k -sS -I "https://localhost:${HTTPS_PORT}/" | head -n 1 || true
-
-API_OK=0
-for PATH in "/api/health" "/health"; do
-  CODE=$("${CURL_BIN}" -k -s -o /dev/null -w "%{http_code}" "https://localhost:${HTTPS_PORT}${PATH}" || true)
-  echo "Check ${PATH}: HTTP ${CODE}"
-  [[ "${CODE}" == "200" ]] && API_OK=1 && break
+for var in "${REQUIRED_VARS[@]}"; do
+  if [[ -z "${!var:-}" ]]; then
+    die "Missing required variable: $var"
+  fi
 done
 
-if [[ "${API_OK}" -ne 1 ]]; then
-  echo "⏳ Attente que l'API devienne healthy (jusqu’à 60 s)…"
-  for i in {1..12}; do
-    sleep 5
-    CODE=$("${CURL_BIN}" -k -s -o /dev/null -w "%{http_code}" "https://localhost:${HTTPS_PORT}/api/health" || true)
-    echo "Tentative $i: /api/health -> ${CODE}"
-    [[ "${CODE}" == "200" ]] && API_OK=1 && break
+# Optional configuration with defaults
+STAGE_SSH_PORT=${STAGE_SSH_PORT:-22}
+STAGE_RUNTIME=${STAGE_RUNTIME:-docker}
+STAGE_SSH_OPTIONS=${STAGE_SSH_OPTIONS:-"-o BatchMode=yes"}
+STAGE_REMOTE_ENV_FILE=${STAGE_REMOTE_ENV_FILE:-}
+STAGE_PRE_DEPLOY_HOOK=${STAGE_PRE_DEPLOY_HOOK:-}
+STAGE_POST_DEPLOY_HOOK=${STAGE_POST_DEPLOY_HOOK:-}
+STAGE_HEALTHCHECK_URLS=${STAGE_HEALTHCHECK_URLS:-}
+STAGE_HEALTHCHECK_TIMEOUT=${STAGE_HEALTHCHECK_TIMEOUT:-300}
+STAGE_HEALTHCHECK_INTERVAL=${STAGE_HEALTHCHECK_INTERVAL:-5}
+STAGE_HEALTHCHECK_EXPECT=${STAGE_HEALTHCHECK_EXPECT:-200}
+
+# ------------------------------ validations ----------------------------------
+for bin in ssh curl "$STAGE_RUNTIME"; do
+  if ! command -v ${bin%% *} >/dev/null 2>&1; then
+    die "Required binary '$bin' not found in PATH"
+  fi
+done
+
+SSH_TARGET="${STAGE_SSH_USER}@${STAGE_SSH_HOST}"
+COMPOSE_FILE="$STAGE_COMPOSE_FILE"
+
+# --------------------------- helper functions --------------------------------
+run_remote() {
+  local description="$1"
+  log INFO "$description"
+  ssh $STAGE_SSH_OPTIONS -p "$STAGE_SSH_PORT" "$SSH_TARGET" bash -se -- \
+    "$STAGE_REMOTE_ENV_FILE" \
+    "$STAGE_RUNTIME" \
+    "$STAGE_PROJECT_DIR" \
+    "$COMPOSE_FILE" \
+    "$STAGE_PRE_DEPLOY_HOOK" \
+    "$STAGE_POST_DEPLOY_HOOK" <<'__REMOTE_SCRIPT__'
+STAGE_REMOTE_ENV_FILE="$1"
+RUNTIME="$2"
+PROJECT_DIR="$3"
+COMPOSE_FILE="$4"
+PRE_HOOK="$5"
+POST_HOOK="$6"
+set -Eeuo pipefail
+if [[ -n "$STAGE_REMOTE_ENV_FILE" && -f "$STAGE_REMOTE_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$STAGE_REMOTE_ENV_FILE"
+fi
+cd "$PROJECT_DIR"
+if [[ -n "$PRE_HOOK" ]]; then
+  printf '[%s] [REMOTE] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "Running pre-deploy hook"
+  eval "$PRE_HOOK"
+fi
+"$RUNTIME" compose -f "$COMPOSE_FILE" pull --quiet
+"$RUNTIME" compose -f "$COMPOSE_FILE" up -d --remove-orphans
+if [[ -n "$POST_HOOK" ]]; then
+  printf '[%s] [REMOTE] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "Running post-deploy hook"
+  eval "$POST_HOOK"
+fi
+__REMOTE_SCRIPT__
+}
+
+wait_for_health() {
+  local url="$1"
+  local deadline=$((SECONDS + STAGE_HEALTHCHECK_TIMEOUT))
+  while (( SECONDS < deadline )); do
+    local status
+    status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "$url" || true)
+    if [[ "$status" == "$STAGE_HEALTHCHECK_EXPECT" ]]; then
+      log INFO "Healthcheck succeeded for $url"
+      return 0
+    fi
+    sleep "$STAGE_HEALTHCHECK_INTERVAL"
   done
+  return 1
+}
+
+# ------------------------------ deployment -----------------------------------
+run_remote "Restarting services on $SSH_TARGET"
+
+# ----------------------------- health checks ---------------------------------
+if [[ -n "$STAGE_HEALTHCHECK_URLS" ]]; then
+  log INFO "Running health checks"
+  IFS=$'\n' read -r -d '' -a urls < <(printf '%s\0' "$STAGE_HEALTHCHECK_URLS") || true
+  for url in "${urls[@]}"; do
+    if [[ -z "$url" ]]; then
+      continue
+    fi
+    if ! wait_for_health "$url"; then
+      die "Healthcheck failed for $url"
+    fi
+  done
+else
+  log INFO "No healthcheck URLs configured"
 fi
 
-if [[ "${API_OK}" -ne 1 ]]; then
-  echo "⚠️  API non healthy après démarrage. Consulte :"
-  echo "    podman logs podman_api_1 --tail=200"
-  popd >/dev/null; exit 2
-fi
-
-msg "✅ Stack STAGE opérationnelle et accessible sur :"
-msg "   → http://localhost:${HTTP_PORT}/"
-msg "   → https://localhost:${HTTPS_PORT}/"
-msg "   → https://localhost:${HTTPS_PORT}/api/health"
-msg
-popd >/dev/null
+log INFO "Stage restart completed successfully"
