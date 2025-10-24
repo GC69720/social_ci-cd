@@ -8,6 +8,7 @@ class _Repo:
 
 def test_register_user():
     repo = _Repo()
-    u = register_user(repo, "john@example.com", "John")
-    assert u.email == "john@example.com"
+    u = register_user(repo, "agent_mulder@xfiles.com", "Agent Mulder")
+    assert u.display_name == "Agent Mulder"
+    assert u.email == "agent_mulder@xfiles.com"
     assert len(repo.list()) == 1

@@ -7,7 +7,7 @@ class UserService:
         self.repo = repo
 
     def register(self, email: str, display_name: str | None = None) -> UserDTO:
-        dto = UserDTO(id=uuid4(), email=email, displayName=display_name)
+        dto = UserDTO(id=str(uuid4()), email=email, display_name=display_name)
         self.repo.add(dto)
         return dto
 
