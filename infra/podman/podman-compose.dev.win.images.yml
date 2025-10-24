@@ -24,7 +24,7 @@ services:
       MONGO_INITDB_DATABASE: app
 
   backend:
-    image: localhost/template_projet-backend:dev
+    image: localhost/reseau-api:dev
     entrypoint: ["/usr/local/bin/backend-entrypoint.sh"]
     environment:
       PYTHONUNBUFFERED: "1"
@@ -43,7 +43,7 @@ services:
 
 
   web:
-    image: localhost/template_projet-web:dev
+    image: localhost/reseau-web:dev
     environment:
       NEXT_PUBLIC_API_BASE: http://localhost:8000
     volumes:

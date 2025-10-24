@@ -1,12 +1,12 @@
 [Unit]
-Description=template_projet web (dev)
+Description=reseau-web (dev)
 
 [Container]
-ContainerName=template_projet-web
-Image=localhost/template_projet-web:dev
+ContainerName=reseau-web
+Image=localhost/reseau-web:dev
 Network=host
 Environment=NEXT_PUBLIC_API_BASE=http://localhost:8000
-Volume=%h/projects/template_projet/web:/app/web:Z
+Volume=%h/projects/reseau-social/web:/app/web:Z
 Exec=bash -lc "cd /app/web && npm run dev"
 
 [Install]

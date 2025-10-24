@@ -1,9 +1,9 @@
 [Unit]
-Description=template_projet backend (dev)
+Description=reseau-api (dev)
 
 [Container]
-ContainerName=template_projet-backend
-Image=localhost/template_projet-backend:dev
+ContainerName=reseau-api
+Image=localhost/reseau-api:dev
 Network=host
 Environment=DJANGO_SETTINGS_MODULE=app.settings
 Environment=DATABASE_URL=postgres://app:app@localhost:5432/app
@@ -13,7 +13,7 @@ Environment=ALLOWED_HOSTS=*
 Environment=PYTHONPATH=/app/backend/src
 Environment=REDIS_URL=redis://localhost:6379/0
 Environment=MONGO_URL=mongodb://localhost:27017
-Volume=%h/projects/template_projet/backend:/app/backend:Z
+Volume=%h/projects/reseau-social/backend:/app/backend:Z
 Exec=python /app/backend/manage.py runserver 0.0.0.0:8000
 
 [Install]

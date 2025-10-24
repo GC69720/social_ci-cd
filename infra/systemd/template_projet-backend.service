@@ -1,12 +1,12 @@
 [Unit]
-Description=template_projet backend (native gunicorn)
+Description=reseau-api (native gunicorn)
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/template_projet/backend
+WorkingDirectory=/opt/reseau-social/backend
 Environment="DJANGO_SETTINGS_MODULE=app.settings"
-EnvironmentFile=/opt/template_projet/backend/.env
+EnvironmentFile=/opt/reseau-social/backend/.env
 ExecStart=/usr/bin/env bash -lc 'PYTHONPATH=src gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 3'
 Restart=on-failure
 

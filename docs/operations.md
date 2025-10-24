@@ -11,18 +11,18 @@ podman-compose -f infra/podman/podman-compose.dev.yml down
 ```bash
 # Copier les fichiers .container dans ~/.config/containers/systemd/
 systemctl --user daemon-reload
-systemctl --user enable --now template_projet-backend.container
-systemctl --user enable --now template_projet-web.container
-systemctl --user restart template_projet-backend.container
-systemctl --user stop template_projet-backend.container
-journalctl --user -u template_projet-backend -f
+systemctl --user enable --now reseau-api.container
+systemctl --user enable --now reseau-web.container
+systemctl --user restart reseau-api.container
+systemctl --user stop reseau-api.container
+journalctl --user -u reseau-api -f
 ```
 
 ## systemd (natif, sans conteneur)
 ```bash
-sudo cp infra/systemd/template_projet-backend.service /etc/systemd/system/
+sudo cp infra/systemd/reseau-api.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now template_projet-backend
-sudo systemctl restart template_projet-backend
-sudo systemctl status template_projet-backend
+sudo systemctl enable --now reseau-api
+sudo systemctl restart reseau-api
+sudo systemctl status reseau-api
 ```
