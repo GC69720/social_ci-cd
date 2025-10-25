@@ -10,3 +10,21 @@ podman port podman_backend_1
 Invoke-RestMethod http://localhost:8000/health
 Invoke-RestMethod http://localhost:8000/users/orm
 Invoke-RestMethod -Method Post -Body @{ email='foo@example.com' } http://localhost:8000/users/orm
+
+
+#Relance simple : 
+cd ~/DEV/social_ci-cd && ./scripts/restart-stage.sh --down && \
+cd ~/DEV/social_applicatif && API_TAG=stage WEB_TAG=stage ./scripts/restart-stage.sh
+
+#Variante “force rebuild”
+cd ~/DEV/social_ci-cd && NO_PULL=0 ./scripts/restart-stage.sh --down && \
+cd ~/DEV/social_applicatif && NO_PULL=0 API_TAG=stage WEB_TAG=stage ./scripts/restart-stage.sh
+
+
+# Pour tout éteindre proprement :
+~/DEV/social_ci-cd/scripts/global-stop-stage.sh
+
+
+#Pour tout relancer :
+~/DEV/scripts/global-restart-stage.sh
+
